@@ -163,6 +163,12 @@ html[dir="rtl"] .swi.on i{right:22px;left:auto}
 .slot{aspect-ratio:1;border-radius:16px;border:1px dashed var(--edge);background:var(--glass);display:grid;place-items:center;font-size:22px;position:relative;overflow:hidden}
 .slot img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .slot .rm{position:absolute;top:2px;right:2px;width:20px;height:20px;border-radius:50%;background:#ff5a6eaa;color:#fff;font-size:12px;display:grid;place-items:center}
+/* hijab overlay + toggle */
+.hijabBtn{position:fixed;right:16px;top:calc(var(--sat) + 150px);z-index:3;padding:7px 12px;border-radius:14px;font-size:12px;white-space:nowrap}
+.hijabBtn.on{background:var(--glow);color:#03305a}
+.hijab{position:absolute;inset:0;pointer-events:none;display:none}
+.hijab.on{display:block}
+.hijab svg{width:100%;height:100%}
 @media (prefers-reduced-motion:reduce){.pop,.bub i,.typing i{animation:none}}
 </style>
 </head>
@@ -248,7 +254,9 @@ html[dir="rtl"] .swi.on i{right:22px;left:auto}
   </div>
  </section>
  <section class="view" id="callActive">
-  <div class="selfpv" id="selfpv" style="display:none"><video id="selfVideo" autoplay playsinline muted></video></div>
+  <div class="selfpv" id="selfpv" style="display:none"><video id="selfVideo" autoplay playsinline muted></video>
+   <div class="hijab" id="hijabLayer"><svg viewBox="0 0 92 130" preserveAspectRatio="none"><path d="M0 0 H92 V40 C92 20 78 6 60 4 C70 18 70 34 62 46 C58 30 50 20 46 16 C42 20 34 30 30 46 C22 34 22 18 32 4 C14 6 0 20 0 40 Z" fill="#eaf3ffe6" stroke="#bcd6f0" stroke-width="1"/></svg></div></div>
+  <button class="gbtn hijabBtn" id="hijabBtn">হিজাব ব্যবহার করুন</button>
   <div class="callwrap">
    <div class="ctop"><div class="cavwrap"><div class="av blob cav140" id="caAv"></div></div>
     <b id="caName"></b><small class="ctimer" id="caTimer">00:00</small></div>
@@ -486,10 +494,13 @@ async function startSelfPreview(){
   $("#selfVideo").srcObject=callStream;$("#selfpv").style.display=callVideo&&!camOff?"block":"none"}
  catch(e){toast(S.lang==="en"?"Camera/mic permission needed":"ক্যামেরা/মাইক্রোফোনের অনুমতি দরকার")}}
 function fmtTime(s){const m=String(Math.floor(s/60)).padStart(2,"0"),x=String(s%60).padStart(2,"0");return m+":"+x}
-function connectCall(){show("callActive");setAv("caAv",people[cur]);$("#caName").textContent=people[cur].n;callSecs=0;$("#caTimer").textContent="00:00";
+function connectCall(){stopRingtone();show("callActive");setAv("caAv",people[cur]);$("#caName").textContent=people[cur].n;callSecs=0;$("#caTimer").textContent="00:00";
  clearInterval(callTimerId);callTimerId=setInterval(()=>{callSecs++;$("#caTimer").textContent=fmtTime(callSecs)},1000);
  muted=false;camOff=false;speakerOn=true;$("#caMute").classList.remove("on");$("#caSpk").classList.toggle("on",speakerOn);$("#caCam").classList.remove("on");
+ $("#hijabLayer").classList.remove("on");$("#hijabBtn").classList.remove("on");$("#hijabBtn").textContent="হিজাব ব্যবহার করুন";
+ $("#hijabBtn").style.display=callVideo?"block":"none";
  if(callVideo)startSelfPreview()}
+$("#hijabBtn").onclick=()=>{const on=$("#hijabLayer").classList.toggle("on");$("#hijabBtn").classList.toggle("on",on);$("#hijabBtn").textContent=on?"হিজাব সরান":"হিজাব ব্যবহার করুন"};
 function endCall(){clearInterval(callTimerId);stopStream();show(callReturnView)}
 $("#voiceCallBtn").onclick=()=>{if(cur===null)return;callVideo=false;callReturnView="chat";show("callOut");setAv("coAv",people[cur]);$("#coName").textContent=people[cur].n;
  setTimeout(()=>{if($("#callOut").classList.contains("show"))connectCall()},2600)};
@@ -497,9 +508,9 @@ $("#videoCallBtn").onclick=()=>{if(cur===null)return;callVideo=true;callReturnVi
  setTimeout(()=>{if($("#callOut").classList.contains("show"))connectCall()},2600)};
 $("#coEnd").onclick=()=>show(callReturnView);
 $("#demoIncoming").onclick=()=>{const i=(Math.random()*people.length)|0;cur=i;callVideo=Math.random()<.5;callReturnView="home";show("callIn");setAv("ciAv",people[i]);$("#ciName").textContent=people[i].n;
- $("#ciLbl").textContent=callVideo?"ইনকামিং ভিডিও কল":"ইনকামিং ভয়েস কল"};
+ $("#ciLbl").textContent=callVideo?"ইনকামিং ভিডিও কল":"ইনকামিং ভয়েস কল";startRingtone()};
 $("#ciAccept").onclick=()=>connectCall();
-$("#ciDecline").onclick=()=>show(callReturnView);
+$("#ciDecline").onclick=()=>{stopRingtone();show(callReturnView)};
 $("#caEnd").onclick=endCall;
 $("#caMute").onclick=()=>{muted=!muted;$("#caMute").classList.toggle("on",muted);if(callStream)callStream.getAudioTracks().forEach(t=>t.enabled=!muted)};
 $("#caSpk").onclick=()=>{speakerOn=!speakerOn;$("#caSpk").classList.toggle("on",speakerOn)};
@@ -538,6 +549,21 @@ document.addEventListener("click",e=>{const b=e.target.closest("[data-toast]");i
 /* bubble sound (synthesised, no files) */
 function blip(delay=0,f=380){if(!S.sound)return;try{ac=ac||new (window.AudioContext||window.webkitAudioContext)();const t=ac.currentTime+delay,o=ac.createOscillator(),g=ac.createGain();o.type="sine";o.frequency.setValueAtTime(f,t);o.frequency.exponentialRampToValueAtTime(f*2.6,t+.09);g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.22,t+.01);g.gain.exponentialRampToValueAtTime(.001,t+.14);o.connect(g).connect(ac.destination);o.start(t);o.stop(t+.16)}catch(e){}}
 function bubbleSound(){blip(0,360);blip(.09,470);blip(.19,300)}
+let ringNodes=null;
+function startRingtone(){if(!S.sound||ringNodes)return;
+ try{ac=ac||new (window.AudioContext||window.webkitAudioContext)();
+  const bufLen=ac.sampleRate*2,buf=ac.createBuffer(1,bufLen,ac.sampleRate),d=buf.getChannelData(0);
+  for(let i=0;i<bufLen;i++)d[i]=(Math.random()*2-1)*.6;
+  const src=ac.createBufferSource();src.buffer=buf;src.loop=true;
+  const filt=ac.createBiquadFilter();filt.type="lowpass";filt.frequency.value=650;
+  const gain=ac.createGain();gain.gain.value=0;
+  const lfo=ac.createOscillator();lfo.frequency.value=.18;
+  const lfoGain=ac.createGain();lfoGain.gain.value=.16;
+  lfo.connect(lfoGain);lfoGain.connect(gain.gain);
+  src.connect(filt);filt.connect(gain);gain.connect(ac.destination);
+  gain.gain.setValueAtTime(.05,ac.currentTime);
+  src.start();lfo.start();ringNodes={src,lfo,gain,filt}}catch(e){}}
+function stopRingtone(){if(!ringNodes)return;try{ringNodes.src.stop();ringNodes.lfo.stop()}catch(e){}ringNodes=null}
 $("#snd").onclick=()=>{S.sound=!S.sound;saveS();applySettings()};
 function renderList(f=""){
  $("#list").innerHTML=people.map((p,i)=>({p,i})).filter(x=>x.p.n.includes(f)).map(({p,i})=>`<button class="row glass" data-i="${i}"><div class="av ${S.shape} ${(S.online&&p.on)?"on":""}">${p.e}</div><div class="t"><b>${p.n}</b><span class="p">${(hist[i]||[]).slice(-1)[0]?.t||p.p}</span></div>${p.u?`<div class="n">${p.u}</div>`:""}</button>`).join("")||'<p style="text-align:center;color:var(--dim)">কাউকে পাওয়া যায়নি। অন্য নাম লিখুন।</p>'}
